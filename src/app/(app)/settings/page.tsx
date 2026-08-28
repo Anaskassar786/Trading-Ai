@@ -7,10 +7,13 @@ type Settings = {
   models: { vision: Slot; text: Slot; judge: Slot };
   testMode: boolean;
 };
+type FallbackEntry = { provider: string; model_id: string };
+type FallbackChains = Record<"vision" | "text" | "judge", FallbackEntry[]>;
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [avail, setAvail] = useState<Avail>({});
+  const [fallbackChains, setFallbackChains] = useState<FallbackChains>({ vision: [], text: [], judge: [] });
   const [msg, setMsg] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -33,6 +36,11 @@ export default function SettingsPage() {
           testMode: Boolean(s?.testMode),
         });
         setAvail(normalizeAvail(j.providers_available));
+        setFallbackChains({
+          vision: Array.isArray(j?.fallback_chains?.vision) ? j.fallback_chains.vision : [],
+          text: Array.isArray(j?.fallback_chains?.text) ? j.fallback_chains.text : [],
+          judge: Array.isArray(j?.fallback_chains?.judge) ? j.fallback_chains.judge : [],
+        });
       } catch (e: any) {
         setLoadError(e?.message ?? String(e));
       }
@@ -59,21 +67,39 @@ export default function SettingsPage() {
     });
   }
 
-  async function save() {
+  async function saveSettings(next: Settings, successMessage = "Saved.") {
     setMsg(null);
     setSaving(true);
     try {
       const r = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(next),
       });
       const j = await r.json();
-      setMsg(r.ok ? "Saved." : j.error || "Failed");
+      setMsg(r.ok ? successMessage : j.error || "Failed");
     } catch (e: any) {
       setMsg(e?.message ?? "Failed");
     }
     setSaving(false);
+  }
+
+  async function save() {
+    if (settings) await saveSettings(settings);
+  }
+
+  async function resetToDefaults() {
+    if (!settings) return;
+    const next: Settings = {
+      ...settings,
+      models: {
+        vision: { provider: "gemini", model_id: "gemini-3.6-flash" },
+        text: { provider: "gemini", model_id: "gemini-3.6-flash" },
+        judge: { provider: "gemini", model_id: "gemini-3.6-flash" },
+      },
+    };
+    setSettings(next);
+    await saveSettings(next, "Defaults restored.");
   }
 
   if (loadError) {
@@ -138,6 +164,12 @@ export default function SettingsPage() {
                   }
                 />
               </div>
+              <div className="muted text-xs mt-2">
+                Fallback models (auto): {fallbackChains[slot]
+                  .filter((entry) => !(entry.provider === cur?.provider && entry.model_id === cur?.model_id))
+                  .map((entry) => `${entry.provider}/${entry.model_id}`)
+                  .join(", ") || "none configured"}
+              </div>
               {cur && !currentConfigured && (
                 <div className="text-amber-300 text-xs mt-2">
                   Selected provider <span className="font-mono">{cur.provider}</span>{" "}
@@ -167,6 +199,9 @@ export default function SettingsPage() {
         <div className="flex items-center gap-2">
           <button className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? "Saving…" : "Save settings"}
+          </button>
+          <button className="btn" onClick={resetToDefaults} disabled={saving}>
+            Reset to defaults
           </button>
           {msg && <span className="muted text-xs">{msg}</span>}
         </div>

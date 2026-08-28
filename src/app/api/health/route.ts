@@ -2,7 +2,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { runHealthChecks } from "@/lib/providers/health";
-import { setHealthCache, getHealthCache } from "@/lib/db";
+import { setHealthCache, getHealthCache, getHealthCacheAgeMs } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -13,7 +13,8 @@ export async function GET(req: Request) {
   if (!force) {
     const cached = getHealthCache();
     const cachedArr = Object.values(cached);
-    if (cachedArr.length === 7) {
+    const cacheAge = getHealthCacheAgeMs();
+    if (cachedArr.length === 7 && cacheAge != null && cacheAge < 60_000) {
       return NextResponse.json({ providers: cachedArr, cached: true });
     }
   }

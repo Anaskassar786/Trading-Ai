@@ -3,6 +3,7 @@
 import "server-only";
 import { getSettings } from "./db";
 import { getEnv, type EnvKey } from "./env";
+import { getChain } from "./fallback-chain";
 import type { ModelConfig } from "./types";
 
 // Canonical registry — provider-level defaults. Specific model_id chosen per session.
@@ -55,7 +56,11 @@ export function providerConfigured(provider: ModelConfig["provider"]): boolean {
 // vision model is correctly detected as image-capable.
 const VISION_HINTS = [
   "vision",
-  "llama-3.2-11b-vision", // OpenRouter free-tier multimodal (selectable in Settings)
+  "phi-3-vision",
+  "vision-instruct",
+  "gemma-3",
+  "qwen2-vl",
+  "llama-3.2-11b-vision",
   "minimax-m3", // per NVIDIA docs, MiniMax M3 supports image input
   "gemini", // all modern Gemini models accept image input
   "gemini-3", // explicit: gemini-3.6-flash supports_image=true
@@ -63,7 +68,6 @@ const VISION_HINTS = [
   "gpt-4-vision",
   "claude-3",
   "llava",
-  "qwen2-vl",
   "qwen-vl",
   "pixtral",
   "florence",
@@ -81,7 +85,7 @@ function guessSupportsReasoning(modelId: string): boolean {
   );
 }
 
-function buildConfig(
+export function buildConfig(
   provider: ModelConfig["provider"],
   model_id: string,
   role: string,
@@ -112,8 +116,8 @@ export function buildEffectiveModels(): {
 } {
   const s = getSettings();
   const visionChoice = s.models.vision;
-  // Fallbacks point at Gemini direct — the only provider verified working from
-  // this deployment. Never fall back to NVIDIA (403) or OpenRouter :free IDs (404).
+  // Keep this function primary-only for snapshot/UI backward compatibility.
+  // Runtime role calls use getModelChain() for provider failover.
   const textChoice = s.models.text ?? {
     provider: "gemini",
     model_id: "gemini-3.6-flash",
@@ -146,4 +150,10 @@ export function buildEffectiveModels(): {
     judge: judge.enabled ? judge : { ...judge, enabled: false },
     all: [vision, text, judge].filter(Boolean) as ModelConfig[],
   };
+}
+
+/** Return the enabled, ordered failover chain for a role. */
+export function getModelChain(role: "vision" | "text" | "judge"): ModelConfig[] {
+  const settings = getSettings();
+  return getChain(role, settings.models[role]);
 }

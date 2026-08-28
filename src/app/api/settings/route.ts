@@ -4,13 +4,21 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { getSettings, saveSettings } from "@/lib/db";
 import { hasEnv } from "@/lib/env";
+import { VISION_CHAIN, TEXT_CHAIN, JUDGE_CHAIN } from "@/lib/fallback-chain";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   const s = getSettings();
+  const publicChain = (chain: readonly { provider: string; model_id: string }[]) =>
+    chain.map(({ provider, model_id }) => ({ provider, model_id }));
   return NextResponse.json({
     settings: s,
+    fallback_chains: {
+      vision: publicChain(VISION_CHAIN),
+      text: publicChain(TEXT_CHAIN),
+      judge: publicChain(JUDGE_CHAIN),
+    },
     providers_available: {
       nvidia: hasEnv("NVIDIA_API_KEY"),
       openrouter: hasEnv("OPENROUTER_API_KEY"),
