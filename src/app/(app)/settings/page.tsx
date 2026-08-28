@@ -130,7 +130,7 @@ export default function SettingsPage() {
                 </select>
                 <input
                   className="input flex-1"
-                  placeholder="Model ID (e.g. gemini-2.0-flash)"
+                  placeholder="Model ID (e.g. gemini-3.6-flash)"
                   value={cur?.model_id ?? ""}
                   disabled={!cur}
                   onChange={(e) =>

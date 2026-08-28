@@ -23,8 +23,10 @@ export function buildProviderOptions(
   avail: Avail,
   current: string | null | undefined
 ): ProviderOption[] {
+  const hasCurrent = Boolean(current);
   const options: ProviderOption[] = [
-    { value: "", label: "(disabled)", disabled: true },
+    // Placeholder is only selectable when this slot has no provider yet.
+    { value: "", label: "(disabled)", disabled: hasCurrent },
   ];
   for (const p of PROVIDERS) {
     const configured = avail[p] === true;

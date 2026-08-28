@@ -51,13 +51,14 @@ export function providerConfigured(provider: ModelConfig["provider"]): boolean {
 }
 
 // Known multimodal-capable model substrings (for capability detection — user can override).
-// "gemini-2.0-flash" matches the "gemini" hint, so the default vision model is
-// correctly detected as image-capable.
+// "gemini-3.6-flash" matches the "gemini" / "gemini-3" hints, so the default
+// vision model is correctly detected as image-capable.
 const VISION_HINTS = [
   "vision",
   "llama-3.2-11b-vision", // OpenRouter free-tier multimodal (selectable in Settings)
   "minimax-m3", // per NVIDIA docs, MiniMax M3 supports image input
-  "gemini", // all modern Gemini models (incl. gemini-2.0-flash) accept image input
+  "gemini", // all modern Gemini models accept image input
+  "gemini-3", // explicit: gemini-3.6-flash supports_image=true
   "gpt-4o",
   "gpt-4-vision",
   "claude-3",
@@ -115,11 +116,11 @@ export function buildEffectiveModels(): {
   // this deployment. Never fall back to NVIDIA (403) or OpenRouter :free IDs (404).
   const textChoice = s.models.text ?? {
     provider: "gemini",
-    model_id: "gemini-2.0-flash",
+    model_id: "gemini-3.6-flash",
   };
   const judgeChoice = s.models.judge ?? {
     provider: "gemini",
-    model_id: "gemini-2.0-flash",
+    model_id: "gemini-3.6-flash",
   };
 
   const vision: ModelConfig | null = visionChoice
