@@ -21,7 +21,17 @@ export default function SettingsPage() {
         const r = await fetch("/api/settings", { cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
-        setSettings(j.settings);
+        // The API returns { settings, providers_available }. Normalize BOTH so a
+        // malformed/legacy payload can never blank the dropdowns or model inputs.
+        const s = j?.settings;
+        setSettings({
+          models: {
+            vision: s?.models?.vision ?? null,
+            text: s?.models?.text ?? null,
+            judge: s?.models?.judge ?? null,
+          },
+          testMode: Boolean(s?.testMode),
+        });
         setAvail(normalizeAvail(j.providers_available));
       } catch (e: any) {
         setLoadError(e?.message ?? String(e));
@@ -120,7 +130,7 @@ export default function SettingsPage() {
                 </select>
                 <input
                   className="input flex-1"
-                  placeholder="Model ID (e.g. meta-llama/llama-3.1-8b-instruct:free)"
+                  placeholder="Model ID (e.g. gemini-2.0-flash)"
                   value={cur?.model_id ?? ""}
                   disabled={!cur}
                   onChange={(e) =>

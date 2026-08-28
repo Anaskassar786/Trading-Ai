@@ -314,8 +314,10 @@ export async function callLLM(
 
     if (!res.error) return res;
     lastErr = res;
-    // Don't retry on auth errors (401/403) or invalid model
-    if (/HTTP 401|HTTP 403|Missing API key|Invalid JSON/i.test(res.error)) break;
+    // Don't retry on auth errors (401/403), model-not-found (404), or invalid
+    // JSON — retrying cannot fix these. The error is returned to the caller,
+    // which logs it and produces a NO_TRADE fallback (never throws).
+    if (/HTTP 401|HTTP 403|HTTP 404|Missing API key|Invalid JSON/i.test(res.error)) break;
     await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
   }
   return (
