@@ -3,7 +3,6 @@
 // Agents receive the SAME immutable snapshot in Round 1 and must not see each other.
 import "server-only";
 import { callLLM, imagePartFromBase64, parseJsonFromLLM, type LLMMessage } from "../llm";
-import { buildEffectiveModels } from "../model-registry";
 import { readUpload } from "../db";
 import type {
   AgentResult,
@@ -209,19 +208,8 @@ function sanitizeResult(obj: any, agent: {number:number;name:string}, model: Mod
   };
 }
 
-/** Decide which model an agent uses. Agents 1-4 and 6 are chart-heavy and prefer a vision model when available. */
-function pickModelFor(agentNum: number, models: ReturnType<typeof buildEffectiveModels>): ModelConfig | null {
-  const needsVision = [1, 2, 3, 4, 6].includes(agentNum);
-  if (needsVision && models.vision?.enabled && models.vision.supports_image) return models.vision;
-  if (models.text.enabled) return models.text;
-  // Fall back to vision model as a text model if it's available
-  if (models.vision?.enabled) return models.vision;
-  return null;
-}
-
 /** Run all 10 agents INDEPENDENTLY against the same frozen snapshot. No agent sees others' output. */
 export async function runRound1(snapshot: AnalysisSnapshot, onProgress?: (msg: string, pct: number) => void): Promise<AgentResult[]> {
-  const models = buildEffectiveModels();
   const screenshotBuf = snapshot.screenshot ? readUpload(snapshot.screenshot.filename) : null;
   const imageB64 = screenshotBuf?.toString("base64");
   const mime = snapshot.screenshot?.mimeType ?? "image/png";
@@ -234,14 +222,7 @@ export async function runRound1(snapshot: AnalysisSnapshot, onProgress?: (msg: s
     const agent = AGENT_REGISTRY[i];
     onProgress?.(`Running Agent ${agent.number}/10 — ${agent.name}...`, 30 + Math.round((i / AGENT_REGISTRY.length) * 50));
 
-    const model = pickModelFor(agent.number, models);
-    if (!model) {
-      results.push(
-        fallbackNoTrade(agent, "ANALYSIS_UNAVAILABLE: no LLM provider is configured with a valid API key and model.", {provider:"none",model_id:"none"})
-      );
-      continue;
-    }
-
+    const role = needsImage(agent.number) ? "vision" : "text";
     const system = specialistSystemPrompt(agent);
     const userText = `${context}
 
@@ -252,7 +233,7 @@ Return the JSON object only.`;
     const messages: LLMMessage[] = [
       { role: "system", content: system },
     ];
-    if (needsImage(agent.number) && imageB64 && model.supports_image) {
+    if (needsImage(agent.number) && imageB64) {
       messages.push({
         role: "user",
         content: [
@@ -260,39 +241,41 @@ Return the JSON object only.`;
           imagePartFromBase64(imageB64, mime),
         ],
       });
+    } else if (needsImage(agent.number)) {
+      // If no screenshot was supplied, chart-dependent agents must not guess.
+      messages.push({
+        role: "user",
+        content: userText +
+          "\n\nNOTE: chart vision is not available for this call. You MUST rely on the supplied market/news/macro snapshot only. If that is insufficient for your specialty, return NO_TRADE with data_quality=INSUFFICIENT.",
+      });
     } else {
-      if (needsImage(agent.number) && (!model.supports_image || !imageB64)) {
-        // If a chart-dependent agent lacks vision, it must rely on market data only.
-        messages.push({
-          role: "user",
-          content: userText +
-            "\n\nNOTE: chart vision is not available for this call. You MUST rely on the supplied market/news/macro snapshot only. If that is insufficient for your specialty, return NO_TRADE with data_quality=INSUFFICIENT.",
-        });
-      } else {
-        messages.push({ role: "user", content: userText });
-      }
+      messages.push({ role: "user", content: userText });
     }
 
     const start = Date.now();
-    const res = await callLLM(model, messages, {
+    const res = await callLLM(role, messages, {
       temperature: 0.2,
-      maxTokens: 2500,
+      maxTokens: 4000,
       jsonMode: true,
       sessionId: snapshot.session_id,
       agentLabel: `agent-${agent.number}`,
-      retries: 1,
+      retries: 3,
     });
     const latency = Date.now() - start;
+    const resultModel = { provider: res.provider, model_id: res.model };
     if (res.error || !res.text) {
-      results.push(fallbackNoTrade(agent, `LLM error (${model.provider}/${model.model_id}): ${res.error ?? "empty response"}`, model));
+      results.push(fallbackNoTrade(agent, `LLM error (${res.provider}/${res.model}): ${res.error ?? "empty response"}`, resultModel));
+      if (i < AGENT_REGISTRY.length - 1) await new Promise((resolve) => setTimeout(resolve, 300));
       continue;
     }
     const parsed = parseJsonFromLLM<any>(res.text);
     if (!parsed || typeof parsed !== "object") {
-      results.push(fallbackNoTrade(agent, `Agent returned invalid JSON: ${res.text.slice(0,300)}`, model));
+      results.push(fallbackNoTrade(agent, `Agent returned invalid JSON: ${res.text.slice(0,300)}`, resultModel));
+      if (i < AGENT_REGISTRY.length - 1) await new Promise((resolve) => setTimeout(resolve, 300));
       continue;
     }
-    results.push(sanitizeResult(parsed, agent, model, latency));
+    results.push(sanitizeResult(parsed, agent, resultModel, latency));
+    if (i < AGENT_REGISTRY.length - 1) await new Promise((resolve) => setTimeout(resolve, 300));
   }
   return results;
 }

@@ -95,6 +95,17 @@ export function saveOutcome(outcome: TradeOutcome) {
 export function getHealthCache(): Record<string, ApiHealthStatus> {
   return readJson<Record<string, ApiHealthStatus>>(HEALTH_FILE, {});
 }
+
+/** Age of the on-disk health cache without changing its JSON storage shape. */
+export function getHealthCacheAgeMs(): number | null {
+  ensureDataDir();
+  try {
+    return Math.max(0, Date.now() - fs.statSync(HEALTH_FILE).mtimeMs);
+  } catch {
+    return null;
+  }
+}
+
 export function setHealthCache(rec: Record<string, ApiHealthStatus>) {
   writeJson(HEALTH_FILE, rec);
 }

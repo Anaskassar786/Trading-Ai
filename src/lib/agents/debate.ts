@@ -3,7 +3,6 @@
 // We generate a small set of high-value challenges rather than fake filler.
 import "server-only";
 import { callLLM, parseJsonFromLLM } from "../llm";
-import { buildEffectiveModels } from "../model-registry";
 import type { AgentResult, AnalysisSnapshot, DebateTurn, Contradiction, Decision } from "../types";
 
 function votes(results: AgentResult[]) {
@@ -84,18 +83,9 @@ export async function runDebate(
   onProgress?: (msg: string, pct: number) => void
 ): Promise<{ turns: DebateTurn[]; contradictions: Contradiction[] }> {
   onProgress?.("Building adversarial debate...", 82);
-  const models = buildEffectiveModels();
-  const model = models.text.enabled ? models.text : (models.vision?.enabled ? models.vision : models.judge);
   const v = votes(results);
 
   const contradictions = detectStaticContradictions(results);
-
-  if (!model) {
-    return {
-      turns: [],
-      contradictions,
-    };
-  }
 
   const agentDump = results.map(compactAgentSummary).join("\n---\n");
 
@@ -137,10 +127,10 @@ ${JSON.stringify(contradictions, null, 2)}
 Produce the debate now. JSON only.`;
 
   const start = Date.now();
-  const res = await callLLM(model, [
+  const res = await callLLM("text", [
     { role: "system", content: system },
     { role: "user", content: user },
-  ], { temperature: 0.2, maxTokens: 3000, jsonMode: true, sessionId: snapshot.session_id, agentLabel: "debate-moderator" });
+  ], { temperature: 0.2, maxTokens: 3500, retries: 3, jsonMode: true, sessionId: snapshot.session_id, agentLabel: "debate-moderator" });
   if (res.error || !res.text) {
     return { turns: [], contradictions };
   }
@@ -163,8 +153,8 @@ Produce the debate now. JSON only.`;
         assessment: String(t?.assessment ?? "").slice(0, 1200),
         winner_side: (["BUY","SELL","NO_TRADE","UNRESOLVED"] as const).includes(t?.winner_side) ? t.winner_side : "UNRESOLVED",
         confidence_change: typeof t?.confidence_change === "number" ? Math.max(-100, Math.min(100, Math.round(t.confidence_change))) : 0,
-        model_used: model.model_id,
-        provider_used: model.provider,
+        model_used: res.model,
+        provider_used: res.provider,
       });
     }
   }

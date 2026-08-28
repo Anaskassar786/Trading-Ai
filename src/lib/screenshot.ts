@@ -7,8 +7,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { callLLM, imagePartFromBase64, parseJsonFromLLM } from "./llm";
-import { buildEffectiveModels } from "./model-registry";
-import { writeUpload, sha256, newId, appendAudit } from "./db";
+import { writeUpload, sha256, newId } from "./db";
 import type { ScreenshotInfo, Timeframe } from "./types";
 
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB
@@ -53,22 +52,8 @@ export async function ingestScreenshot(
     sha256: hash,
   };
 
-  // Try to run vision-based detection if a multimodal model is configured
-  const models = buildEffectiveModels();
-  const visionModel = models.vision;
-  if (!visionModel) {
-    return {
-      info,
-      visionError:
-        "IMAGE_ANALYSIS_UNAVAILABLE: no vision model is configured (or its provider has no API key). Symbol/timeframe detection will rely on user input.",
-    };
-  }
-  if (!visionModel.supports_image) {
-    return {
-      info,
-      visionError: `IMAGE_ANALYSIS_UNAVAILABLE: the configured vision model "${visionModel.provider}/${visionModel.model_id}" does not support image input. Set a multimodal model (e.g. gemini/gemini-2.0-flash) in Settings — symbol/timeframe detection will rely on user input until then.`,
-    };
-  }
+  // The vision role owns its ordered multimodal failover chain. If no provider
+  // key is configured, callLLM returns a clear unavailable error without guessing.
   const b64 = bytes.toString("base64");
   const system = `You are a chart-screenshot inspector for a position-trading assistant.
 You receive ONE trading chart screenshot.
@@ -89,9 +74,8 @@ Return STRICT JSON with this schema:
 }`;
   const userPrompt = `Inspect this chart screenshot carefully.
 Return JSON only. Do not add prose outside the JSON.`;
-  const start = Date.now();
   const res = await callLLM(
-    visionModel,
+    "vision",
     [
       { role: "system", content: system },
       {
@@ -109,14 +93,6 @@ Return JSON only. Do not add prose outside the JSON.`;
       agentLabel: "vision-inspector",
     }
   );
-  appendAudit({
-    provider: res.provider,
-    model: res.model,
-    agent: "vision-inspector",
-    request_status: res.error ? "ERROR" : "OK",
-    latency_ms: Date.now() - start,
-    error: res.error,
-  });
   if (res.error || !res.text) {
     return { info, visionError: res.error || "Vision inspection returned empty." };
   }

@@ -3,7 +3,6 @@
 // the final BUY / SELL / NO_TRADE with full trade plan.
 import "server-only";
 import { callLLM, parseJsonFromLLM } from "../llm";
-import { buildEffectiveModels } from "../model-registry";
 import type {
   AgentResult,
   AnalysisSnapshot,
@@ -64,8 +63,6 @@ export async function runChiefJudge(
 ): Promise<FinalDecision> {
   onProgress?.("Chief Judge analyzing all evidence...", 90);
   const start = Date.now();
-  const models = buildEffectiveModels();
-  const model = models.judge?.enabled ? models.judge : (models.text.enabled ? models.text : models.vision);
 
   const v = results.reduce(
     (acc, r) => {
@@ -80,37 +77,6 @@ export async function runChiefJudge(
   const agentErrors = results.map((r) => r.error).filter(Boolean) as string[];
   const allAgentsErrored = agentErrors.length === results.length;
   const anyAgentEvidence = results.some((r) => !r.error && r.evidence.length > 0);
-
-  if (!model) {
-    return {
-      final_decision: "NO_TRADE",
-      vote_distribution: v,
-      final_confidence: 0,
-      entry: { low: null, high: null },
-      stop_loss: null,
-      targets: { tp1: null, tp2: null, tp3: null },
-      risk_amount: snapshot.risk.riskAmount ?? null,
-      position_size: null,
-      risk_reward: null,
-      decision_summary:
-        "ANALYSIS_UNAVAILABLE — no LLM provider is configured (no provider API key is present for any model). " +
-        "Open the API Health page (/api-health) to see which providers are configured, set at least one " +
-        "provider key in the server-side environment variables, then re-run this analysis.",
-      strongest_bullish_arguments: [],
-      strongest_bearish_arguments: [],
-      rejected_arguments: [],
-      invalidation_conditions: [],
-      warnings: [
-        "No LLM provider is configured; analysis unavailable.",
-        "Check the API Health page (/api-health) and configure at least one provider.",
-        "No verdict, entry, stop loss, or target was fabricated.",
-      ],
-      data_quality: "DATA_UNAVAILABLE",
-      model_used: "none",
-      provider_used: "none",
-      latency_ms: Date.now() - start,
-    };
-  }
 
   // If every agent errored before producing any real evidence, do NOT make an
   // LLM call and do NOT fabricate a verdict. Return explicit ANALYSIS_UNAVAILABLE.
@@ -154,8 +120,8 @@ export async function runChiefJudge(
         "Do NOT trade based on this session.",
       ],
       data_quality: "DATA_UNAVAILABLE",
-      model_used: model.model_id,
-      provider_used: model.provider,
+      model_used: "none",
+      provider_used: "none",
       latency_ms: Date.now() - start,
     };
   }
@@ -225,12 +191,13 @@ ${contraDump || "(no system-detected contradictions)"}
 Now, produce your independent final verdict. Return only the JSON object.`;
 
   const llmStart = Date.now();
-  const res = await callLLM(model, [
+  const res = await callLLM("judge", [
     { role: "system", content: system },
     { role: "user", content: user },
   ], {
     temperature: 0.2,
-    maxTokens: 3500,
+    maxTokens: 4000,
+    retries: 3,
     jsonMode: true,
     sessionId: snapshot.session_id,
     agentLabel: "chief-judge",
@@ -257,8 +224,8 @@ Now, produce your independent final verdict. Return only the JSON object.`;
     warnings: [res.error ?? "Malformed response from Chief Judge model."],
     data_quality: pickDataQuality(results, snapshot),
     data_freshness: snapshot.market.fetchedAt,
-    model_used: model.model_id,
-    provider_used: model.provider,
+    model_used: res.model,
+    provider_used: res.provider,
     latency_ms: latency,
   };
   if (!parsed || typeof parsed !== "object") return fallbackDecision;
@@ -333,8 +300,8 @@ Now, produce your independent final verdict. Return only the JSON object.`;
     warnings,
     data_quality: pickDataQuality(results, snapshot),
     data_freshness: snapshot.market.fetchedAt ?? snapshot.news.fetchedAt ?? snapshot.macro.fetchedAt,
-    model_used: model.model_id,
-    provider_used: model.provider,
+    model_used: res.model,
+    provider_used: res.provider,
     latency_ms: latency,
   };
 }
