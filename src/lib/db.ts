@@ -109,17 +109,15 @@ export interface AppSettings {
   testMode: boolean;
 }
 
-// Defaults use Google Gemini direct (gemini-2.0-flash) — verified working with a
-// standard GEMINI_API_KEY as of 2026-08. OpenRouter free-tier IDs (llama-3.1-8b
-// :free etc.) now 404 ("unavailable for free") and NVIDIA returns 403, so they
-// are NOT defaults anymore. They can still be selected manually in Settings.
-// Same model across all 10 agents is acceptable for the initial working version;
-// the model registry already supports routing slots to different providers.
+// Defaults use Google Gemini direct (gemini-3.6-flash) — the only Gemini model
+// ID verified working with this project's GEMINI_API_KEY. gemini-2.0-flash
+// returns 404 ("use gemini-3.6-flash"). OpenRouter free-tier IDs 404 and NVIDIA
+// returns 403, so they are NOT defaults. They can still be selected in Settings.
 const DEFAULT_SETTINGS: AppSettings = {
   models: {
-    vision: { provider: "gemini", model_id: "gemini-2.0-flash" },
-    text: { provider: "gemini", model_id: "gemini-2.0-flash" },
-    judge: { provider: "gemini", model_id: "gemini-2.0-flash" },
+    vision: { provider: "gemini", model_id: "gemini-3.6-flash" },
+    text: { provider: "gemini", model_id: "gemini-3.6-flash" },
+    judge: { provider: "gemini", model_id: "gemini-3.6-flash" },
   },
   testMode: false,
 };

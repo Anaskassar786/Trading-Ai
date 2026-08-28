@@ -76,6 +76,7 @@ async function checkOpenAICompat(
   //    model_valid=true ONLY on HTTP 200. 404 → model not available,
   //    401/403 → auth invalid.
   if (!modelId) {
+    rec.model_valid = false;
     rec.note =
       "No model routed to this provider in Settings — chat validation skipped.";
     return rec;
@@ -169,6 +170,7 @@ async function checkGemini(modelId: string | undefined): Promise<ApiHealthStatus
   //    settings (never a hardcoded fallback). model_valid=true ONLY on HTTP 200.
   //    404 → model invalid; 401/403 → auth invalid.
   if (!modelId) {
+    rec.model_valid = false;
     rec.note = "No Gemini model routed in Settings — chat validation skipped.";
     return rec;
   }
@@ -179,13 +181,13 @@ async function checkGemini(modelId: string | undefined): Promise<ApiHealthStatus
   const gstart = Date.now();
   try {
     const ctl = new AbortController();
-    const to = setTimeout(() => ctl.abort(), 20000);
+    const to = setTimeout(() => ctl.abort(), 15000);
     const gr = await fetch(genUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: "ping" }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 8 },
+        generationConfig: { temperature: 0, maxOutputTokens: 5 },
       }),
       signal: ctl.signal,
     });
@@ -238,6 +240,9 @@ export async function runHealthChecks(): Promise<ApiHealthStatus[]> {
     for (const m of [models.vision, models.text, models.judge]) {
       if (m && m.provider === provider) return m.model_id;
     }
+    // Gemini is the only provider we default-route. Unrouted nvidia/openrouter
+    // must NOT be pinged with a fallback model (that produced confusing 404s).
+    if (provider === "gemini") return "gemini-3.6-flash";
     return undefined;
   }
   const nvidiaModel = pickModel("nvidia");
