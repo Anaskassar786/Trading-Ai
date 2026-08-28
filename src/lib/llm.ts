@@ -463,7 +463,7 @@ export async function callLLM(
 
       auditAttempt(result, opts);
       totalLatency += result.latency_ms;
-      recordCircuitOutcome(cfg.provider, /HTTP (429|503)\b/i.test(result.error));
+      recordCircuitOutcome(cfg.provider, /HTTP (429|503)\b/i.test(result.error ?? ""));
 
       if (!result.error) {
         // Deliberately separate from the attempt audit: this is the durable
