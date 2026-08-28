@@ -1,0 +1,98 @@
+{
+  "note": "Default model registry & agent routing for Trading AI AK. Edit via Settings UI or API (/api/settings/registry). NEVER put API keys here — keys live only in server-side env vars.",
+  "providers": {
+    "nvidia": {
+      "label": "NVIDIA (OpenAI-compatible)",
+      "type": "openai-compatible",
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "key_env": "NVIDIA_API_KEY"
+    },
+    "openrouter": {
+      "label": "OpenRouter",
+      "type": "openai-compatible",
+      "base_url": "https://openrouter.ai/api/v1",
+      "key_env": "OPENROUTER_API_KEY"
+    },
+    "gemini": {
+      "label": "Google Gemini",
+      "type": "gemini",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "key_env": "GEMINI_API_KEY"
+    },
+    "minimax-direct": {
+      "label": "MiniMax (direct)",
+      "type": "openai-compatible",
+      "base_url": null,
+      "key_env": "MINIMAX_API_KEY",
+      "note": "Direct MiniMax endpoint NOT CONFIGURED. MiniMax models are currently routed through NVIDIA/OpenRouter; the actual provider used is recorded in execution metadata."
+    }
+  },
+  "models": [
+    {
+      "key": "nvidia-minimax-m3",
+      "provider": "nvidia",
+      "model_id": "minimaxai/minimax-m3",
+      "label": "MiniMax M3 (via NVIDIA)",
+      "supports_image": false,
+      "supports_reasoning": true,
+      "supports_structured_output": true,
+      "enabled": true,
+      "priority": 1,
+      "fallback_priority": 1,
+      "temperature": 0.2,
+      "routed_note": "MiniMax model accessed through NVIDIA, not a direct MiniMax endpoint."
+    },
+    {
+      "key": "gemini-vision",
+      "provider": "gemini",
+      "model_id": null,
+      "label": "Gemini multimodal (model id NOT CONFIGURED — set in Settings)",
+      "supports_image": true,
+      "supports_reasoning": true,
+      "supports_structured_output": true,
+      "enabled": false,
+      "priority": 2,
+      "fallback_priority": 2,
+      "temperature": 0.2
+    },
+    {
+      "key": "openrouter-default",
+      "provider": "openrouter",
+      "model_id": null,
+      "label": "OpenRouter model (model id NOT CONFIGURED — set in Settings)",
+      "supports_image": false,
+      "supports_reasoning": true,
+      "supports_structured_output": true,
+      "enabled": false,
+      "priority": 3,
+      "fallback_priority": 3,
+      "temperature": 0.2
+    }
+  ],
+  "routing": {
+    "vision_detection": { "model_key": "gemini-vision", "fallbacks": [] },
+    "agent_1": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_2": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_3": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_4": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_5": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_6": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_7": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_8": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_9": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "agent_10": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "debate": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] },
+    "chief_judge": { "model_key": "nvidia-minimax-m3", "fallbacks": ["openrouter-default"] }
+  },
+  "symbols": {
+    "XAU/USD": { "twelvedata": "XAU/USD", "type": "metal", "label": "Gold / US Dollar" },
+    "EUR/USD": { "twelvedata": "EUR/USD", "type": "forex", "label": "Euro / US Dollar" },
+    "GBP/USD": { "twelvedata": "GBP/USD", "type": "forex", "label": "British Pound / US Dollar" },
+    "USD/JPY": { "twelvedata": "USD/JPY", "type": "forex", "label": "US Dollar / Japanese Yen" },
+    "AUD/USD": { "twelvedata": "AUD/USD", "type": "forex", "label": "Australian Dollar / US Dollar" },
+    "USD/CHF": { "twelvedata": "USD/CHF", "type": "forex", "label": "US Dollar / Swiss Franc" },
+    "USD/CAD": { "twelvedata": "USD/CAD", "type": "forex", "label": "US Dollar / Canadian Dollar" },
+    "NZD/USD": { "twelvedata": "NZD/USD", "type": "forex", "label": "New Zealand Dollar / US Dollar" },
+    "XAG/USD": { "twelvedata": "XAG/USD", "type": "metal", "label": "Silver / US Dollar" }
+  }
+}

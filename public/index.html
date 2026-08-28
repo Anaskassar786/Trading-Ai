@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Trading AI AK — Private Analysis Terminal</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">AK</div>
+      <div>
+        <div class="brand-name">Trading AI AK</div>
+        <div class="brand-sub">Private analysis terminal</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <div class="nav-group">Analysis</div>
+      <a href="#dashboard" data-v="dashboard">Dashboard</a>
+      <a href="#new" data-v="new">New Analysis</a>
+      <a href="#running" data-v="running">Analysis Running</a>
+      <div class="nav-group">Council</div>
+      <a href="#council" data-v="council">Agent Council</a>
+      <a href="#debate" data-v="debate">Debate Room</a>
+      <a href="#final" data-v="final">Final Decision</a>
+      <a href="#plan" data-v="plan">Trade Plan</a>
+      <div class="nav-group">Tools</div>
+      <a href="#risk" data-v="risk">Risk Calculator</a>
+      <a href="#history" data-v="history">Trade History</a>
+      <a href="#performance" data-v="performance">AI Performance</a>
+      <div class="nav-group">Data</div>
+      <a href="#market" data-v="market">Market Data</a>
+      <a href="#news" data-v="news">News</a>
+      <a href="#macro" data-v="macro">Macro</a>
+      <div class="nav-group">System</div>
+      <a href="#health" data-v="health">API Health</a>
+      <a href="#settings" data-v="settings">Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button id="themeToggle" class="btn ghost small">Toggle theme</button>
+      <div id="testModeBadge" class="hidden badge warn">TEST MODE</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div id="disclaimer" class="disclaimer">
+      Analytical decision-support only. Not a broker. No live trading. No guaranteed outcomes.
+      Agent vote percentages are vote distribution, <b>not</b> probability of profit.
+    </div>
+    <div id="sessionBar" class="session-bar hidden">
+      <span class="muted">Active session:</span> <code id="sessionBarId"></code>
+      <span id="sessionBarMeta"></span>
+    </div>
+    <div id="view"></div>
+  </main>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
