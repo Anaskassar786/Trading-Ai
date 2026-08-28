@@ -56,11 +56,17 @@ export async function ingestScreenshot(
   // Try to run vision-based detection if a multimodal model is configured
   const models = buildEffectiveModels();
   const visionModel = models.vision;
-  if (!visionModel || !visionModel.supports_image) {
+  if (!visionModel) {
     return {
       info,
       visionError:
-        "IMAGE_ANALYSIS_UNAVAILABLE: no vision-capable model configured. Symbol/timeframe detection will rely on user input.",
+        "IMAGE_ANALYSIS_UNAVAILABLE: no vision model is configured (or its provider has no API key). Symbol/timeframe detection will rely on user input.",
+    };
+  }
+  if (!visionModel.supports_image) {
+    return {
+      info,
+      visionError: `IMAGE_ANALYSIS_UNAVAILABLE: the configured vision model "${visionModel.provider}/${visionModel.model_id}" does not support image input. Set a multimodal model (e.g. gemini/gemini-2.0-flash) in Settings — symbol/timeframe detection will rely on user input until then.`,
     };
   }
   const b64 = bytes.toString("base64");

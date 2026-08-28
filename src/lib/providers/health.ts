@@ -26,11 +26,9 @@ async function checkOpenAICompat(
     rec.last_error = "No API key configured.";
     return rec;
   }
-  if (!modelId) {
-    rec.last_error = "No model ID configured.";
-    return rec;
-  }
-  // 1) lightweight /models check to validate base URL + auth
+  // 1) lightweight /models check to validate base URL + auth.
+  //    The listing is INFORMATIONAL only — model_valid is decided by a real
+  //    chat-completions call with the CONFIGURED model below.
   const modelsUrl = `${base.replace(/\/$/, "")}/models`;
   const start = Date.now();
   try {
@@ -50,10 +48,11 @@ async function checkOpenAICompat(
       try {
         const j = JSON.parse(txt);
         const list: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j?.models) ? j.models : [];
-        const found = list.some((m: any) => m.id === modelId || m.id?.includes(modelId));
-        rec.model_valid = found;
-        if (!found) {
-          rec.note = `Model "${modelId}" not found in /models listing; may still be accepted by chat completions but not advertised.`;
+        if (modelId) {
+          const found = list.some((m: any) => m.id === modelId);
+          if (!found) {
+            rec.note = `Model "${modelId}" not advertised in /models listing; the real chat test below decides validity.`;
+          }
         }
       } catch {
         rec.note = "Could not parse /models response.";
@@ -73,39 +72,48 @@ async function checkOpenAICompat(
     rec.last_error = `Network error: ${err}`;
     return rec;
   }
-  // 2) Try a trivial chat-completions call to further validate model
-  if (rec.auth_valid) {
-    const chatUrl = `${base.replace(/\/$/, "")}/chat/completions`;
-    const cstart = Date.now();
-    try {
-      const ctl = new AbortController();
-      const to = setTimeout(() => ctl.abort(), 20000);
-      const cr = await fetch(chatUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 5,
-          temperature: 0,
-        }),
-        signal: ctl.signal,
-      });
-      clearTimeout(to);
-      rec.latency_ms = Date.now() - cstart;
-      const ctxt = await cr.text();
-      if (cr.ok) {
-        rec.model_valid = true;
-        rec.last_success_at = new Date().toISOString();
-      } else {
-        rec.last_error = `Chat HTTP ${cr.status}: ${ctxt.slice(0, 300)}`;
-      }
-    } catch (e: any) {
-      rec.last_error = `Chat network error: ${String(e?.message ?? e)}`;
+  // 2) REAL chat-completions validation with the model CONFIGURED in settings.
+  //    model_valid=true ONLY on HTTP 200. 404 → model not available,
+  //    401/403 → auth invalid.
+  if (!modelId) {
+    rec.note =
+      "No model routed to this provider in Settings — chat validation skipped.";
+    return rec;
+  }
+  if (!rec.auth_valid) return rec;
+  const chatUrl = `${base.replace(/\/$/, "")}/chat/completions`;
+  const cstart = Date.now();
+  try {
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 20000);
+    const cr = await fetch(chatUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 5,
+        temperature: 0,
+      }),
+      signal: ctl.signal,
+    });
+    clearTimeout(to);
+    rec.latency_ms = Date.now() - cstart;
+    const ctxt = await cr.text();
+    if (cr.ok) {
+      rec.model_valid = true;
+      rec.last_success_at = new Date().toISOString();
+    } else if (cr.status === 401 || cr.status === 403) {
+      rec.auth_valid = false;
+      rec.last_error = `Chat auth error (HTTP ${cr.status}): ${ctxt.slice(0, 300)}`;
+    } else {
+      rec.last_error = `Chat HTTP ${cr.status} for model "${modelId}": ${ctxt.slice(0, 300)}`;
     }
+  } catch (e: any) {
+    rec.last_error = `Chat network error: ${String(e?.message ?? e)}`;
   }
   return rec;
 }
@@ -124,13 +132,10 @@ async function checkGemini(modelId: string | undefined): Promise<ApiHealthStatus
     rec.last_error = "No API key configured.";
     return rec;
   }
-  if (!modelId) {
-    rec.last_error = "No Gemini model ID configured.";
-    return rec;
-  }
+  // 1) models.list to verify endpoint + key. Listing result is informational;
+  //    model_valid is decided by a real generateContent call below.
   const start = Date.now();
   try {
-    // Use models.list to verify key
     const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`;
     const ctl = new AbortController();
     const to = setTimeout(() => ctl.abort(), 15000);
@@ -144,16 +149,60 @@ async function checkGemini(modelId: string | undefined): Promise<ApiHealthStatus
       rec.auth_valid = true;
       const j = JSON.parse(txt);
       const list: any[] = Array.isArray(j?.models) ? j.models : [];
-      const found = list.some((m) => m.name?.endsWith(modelId) || m.name?.includes(modelId));
-      rec.model_valid = found;
-      if (!found) rec.note = `Model "${modelId}" not found in /models listing.`;
+      if (modelId) {
+        const found = list.some((m) => m.name?.endsWith(modelId) || m.name?.includes(modelId));
+        if (!found) rec.note = `Model "${modelId}" not found in /models listing; the real generateContent test below decides validity.`;
+      }
       rec.last_success_at = new Date().toISOString();
+    } else if (r.status === 401 || r.status === 403) {
+      rec.auth_valid = false;
+      rec.last_error = `Auth error (HTTP ${r.status}): ${txt.slice(0, 200)}`;
     } else {
       rec.last_error = `HTTP ${r.status}: ${txt.slice(0, 200)}`;
     }
   } catch (e: any) {
     rec.latency_ms = Date.now() - start;
     rec.last_error = `Network: ${String(e?.message ?? e)}`;
+    return rec;
+  }
+  // 2) ALWAYS run a REAL generateContent call with the model CONFIGURED in
+  //    settings (never a hardcoded fallback). model_valid=true ONLY on HTTP 200.
+  //    404 → model invalid; 401/403 → auth invalid.
+  if (!modelId) {
+    rec.note = "No Gemini model routed in Settings — chat validation skipped.";
+    return rec;
+  }
+  if (!rec.auth_valid) return rec;
+  const genUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    modelId
+  )}:generateContent?key=${encodeURIComponent(key)}`;
+  const gstart = Date.now();
+  try {
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 20000);
+    const gr = await fetch(genUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: "ping" }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 8 },
+      }),
+      signal: ctl.signal,
+    });
+    clearTimeout(to);
+    rec.latency_ms = Date.now() - gstart;
+    const gtxt = await gr.text();
+    if (gr.ok) {
+      rec.model_valid = true;
+      rec.last_success_at = new Date().toISOString();
+    } else if (gr.status === 401 || gr.status === 403) {
+      rec.auth_valid = false;
+      rec.last_error = `generateContent auth error (HTTP ${gr.status}): ${gtxt.slice(0, 300)}`;
+    } else {
+      rec.last_error = `generateContent HTTP ${gr.status} for model "${modelId}": ${gtxt.slice(0, 300)}`;
+    }
+  } catch (e: any) {
+    rec.last_error = `generateContent network error: ${String(e?.message ?? e)}`;
   }
   return rec;
 }
@@ -181,18 +230,19 @@ async function checkMiniMax(): Promise<ApiHealthStatus> {
 
 export async function runHealthChecks(): Promise<ApiHealthStatus[]> {
   const models = buildEffectiveModels();
-  // For each provider pick the model currently routed to it; if none, fall back
-  // to a reasonable default test model id so the /models list & auth can still be
-  // validated without fabricating predictions.
-  function pickModel(provider: string, fallback?: string): string | undefined {
+  // Test ONLY the model IDs actually configured in Settings (routed to each
+  // provider). No hardcoded fallback model IDs — a provider with no model
+  // routed to it is reported as "chat validation skipped" instead of being
+  // tested against an arbitrary model it may not serve.
+  function pickModel(provider: string): string | undefined {
     for (const m of [models.vision, models.text, models.judge]) {
       if (m && m.provider === provider) return m.model_id;
     }
-    return fallback;
+    return undefined;
   }
-  const nvidiaModel = pickModel("nvidia", "minimaxai/minimax-m3");
-  const orModel = pickModel("openrouter", "openai/gpt-4o-mini");
-  const geminiModel = pickModel("gemini", "gemini-1.5-flash");
+  const nvidiaModel = pickModel("nvidia");
+  const orModel = pickModel("openrouter");
+  const geminiModel = pickModel("gemini");
 
   const [nvidia, openrouter, gemini, minimax, twelvedata, fred, newsapi] = await Promise.all([
     checkOpenAICompat("nvidia", "https://integrate.api.nvidia.com/v1", getEnv("NVIDIA_API_KEY"), nvidiaModel),

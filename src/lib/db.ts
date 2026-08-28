@@ -109,13 +109,17 @@ export interface AppSettings {
   testMode: boolean;
 }
 
-// Defaults use OpenRouter free-tier models. NVIDIA `minimaxai/minimax-m3` was
-// removed because it returns 403 Forbidden from this environment.
+// Defaults use Google Gemini direct (gemini-2.0-flash) — verified working with a
+// standard GEMINI_API_KEY as of 2026-08. OpenRouter free-tier IDs (llama-3.1-8b
+// :free etc.) now 404 ("unavailable for free") and NVIDIA returns 403, so they
+// are NOT defaults anymore. They can still be selected manually in Settings.
+// Same model across all 10 agents is acceptable for the initial working version;
+// the model registry already supports routing slots to different providers.
 const DEFAULT_SETTINGS: AppSettings = {
   models: {
-    vision: { provider: "openrouter", model_id: "meta-llama/llama-3.2-11b-vision-instruct:free" },
-    text: { provider: "openrouter", model_id: "meta-llama/llama-3.1-8b-instruct:free" },
-    judge: { provider: "openrouter", model_id: "deepseek/deepseek-chat:free" },
+    vision: { provider: "gemini", model_id: "gemini-2.0-flash" },
+    text: { provider: "gemini", model_id: "gemini-2.0-flash" },
+    judge: { provider: "gemini", model_id: "gemini-2.0-flash" },
   },
   testMode: false,
 };
