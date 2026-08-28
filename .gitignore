@@ -1,0 +1,23 @@
+node_modules
+.next
+out
+dist
+build
+coverage
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vscode
+.idea
+
+# Persisted runtime data (never commit sessions, outcomes, health cache, uploads)
+data/sessions.json
+data/outcomes.json
+data/health.json
+data/settings.json
+data/audit.json
+data/uploads/*
+!data/uploads/.gitkeep
+!data/.gitkeep

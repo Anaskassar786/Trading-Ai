@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+html, body {
+  height: 100%;
+  background: #0b0f17;
+  color: #e2e8f0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+a { color: #60a5fa; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+@layer components {
+  .card {
+    @apply bg-bg-card border border-bg-border rounded-xl p-4 shadow-sm;
+  }
+  .panel {
+    @apply bg-bg-panel border border-bg-border rounded-xl p-4;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-bg-border bg-bg-soft hover:bg-bg-card transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply bg-accent-info hover:bg-blue-600 border-blue-600 text-white;
+  }
+  .btn-buy { @apply bg-accent-buy hover:bg-emerald-600 border-emerald-600 text-white; }
+  .btn-sell { @apply bg-accent-sell hover:bg-red-600 border-red-600 text-white; }
+  .btn-wait { @apply bg-accent-wait hover:bg-amber-500 border-amber-500 text-black; }
+  .input {
+    @apply bg-bg-soft border border-bg-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-accent-info w-full;
+  }
+  .label { @apply text-xs uppercase tracking-wider text-slate-400 mb-1 block; }
+  .muted { @apply text-slate-400 text-sm; }
+  .chip { @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border border-bg-border bg-bg-soft; }
+  .chip-buy { @apply text-emerald-300 border-emerald-700 bg-emerald-900/30; }
+  .chip-sell { @apply text-red-300 border-red-700 bg-red-900/30; }
+  .chip-wait { @apply text-amber-300 border-amber-700 bg-amber-900/30; }
+  .chip-muted { @apply text-slate-300 border-slate-700 bg-slate-800/40; }
+  .section-title { @apply text-lg font-semibold mb-3 tracking-tight; }
+  .kbd { @apply px-1.5 py-0.5 rounded bg-bg-soft border border-bg-border text-[10px] font-mono text-slate-400; }
+}
+
+.scrollbar-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: #0b0f17; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: #253049; border-radius: 4px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #334366; }
