@@ -109,17 +109,34 @@ export interface AppSettings {
   testMode: boolean;
 }
 
+// Defaults use OpenRouter free-tier models. NVIDIA `minimaxai/minimax-m3` was
+// removed because it returns 403 Forbidden from this environment.
 const DEFAULT_SETTINGS: AppSettings = {
   models: {
-    vision: { provider: "nvidia", model_id: "minimaxai/minimax-m3" },
-    text: { provider: "nvidia", model_id: "minimaxai/minimax-m3" },
-    judge: { provider: "nvidia", model_id: "minimaxai/minimax-m3" },
+    vision: { provider: "openrouter", model_id: "meta-llama/llama-3.2-11b-vision-instruct:free" },
+    text: { provider: "openrouter", model_id: "meta-llama/llama-3.1-8b-instruct:free" },
+    judge: { provider: "openrouter", model_id: "deepseek/deepseek-chat:free" },
   },
   testMode: false,
 };
 
 export function getSettings(): AppSettings {
-  return { ...DEFAULT_SETTINGS, ...readJson<Partial<AppSettings>>(SETTINGS_FILE, {}) };
+  // Deep-merge stored settings over defaults PER MODEL SLOT, so that a stored
+  // settings.json with null/missing slots (from an older deploy) can never
+  // blank out the defaults and leave the Settings dropdowns stuck on "(disabled)".
+  const stored = readJson<Partial<AppSettings>>(SETTINGS_FILE, {});
+  const storedModels = stored.models ?? ({} as Partial<AppSettings["models"]>);
+  return {
+    models: {
+      vision: storedModels.vision ?? DEFAULT_SETTINGS.models.vision,
+      text: storedModels.text ?? DEFAULT_SETTINGS.models.text,
+      judge: storedModels.judge ?? DEFAULT_SETTINGS.models.judge,
+    },
+    testMode:
+      typeof stored.testMode === "boolean"
+        ? stored.testMode
+        : DEFAULT_SETTINGS.testMode,
+  };
 }
 export function saveSettings(s: AppSettings) {
   writeJson(SETTINGS_FILE, s);

@@ -19,6 +19,7 @@ export default function NewAnalysisForm() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [busyMsg, setBusyMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<{
     visionWarning?: string;
@@ -42,9 +43,11 @@ export default function NewAnalysisForm() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return; // prevent double submissions
     setError(null);
     setPreflight(null);
     setBusy(true);
+    setBusyMsg("Creating analysis session...");
     try {
       const fd = new FormData();
       fd.append("instrumentClass", assetClass);
@@ -61,6 +64,7 @@ export default function NewAnalysisForm() {
       if (!res.ok) {
         setError(data.error || "Failed to create analysis session");
         setBusy(false);
+        setBusyMsg(null);
         return;
       }
 
@@ -72,6 +76,7 @@ export default function NewAnalysisForm() {
       });
 
       // 2) Kick off the agent pipeline (returns immediately)
+      setBusyMsg("Starting the 10-agent pipeline...");
       await fetch("/api/run-agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -83,6 +88,7 @@ export default function NewAnalysisForm() {
     } catch (err: any) {
       setError(err?.message ?? String(err));
       setBusy(false);
+      setBusyMsg(null);
     }
   }
 
@@ -155,9 +161,15 @@ export default function NewAnalysisForm() {
           <div className="text-amber-300 text-sm border border-amber-900/60 bg-amber-950/30 rounded-lg p-2">{preflight.visionWarning}</div>
         )}
 
-        <button type="submit" className="btn btn-primary w-full py-3 text-base" disabled={busy}>
-          {busy ? "Starting analysis…" : "Analyze"}
+        <button type="submit" className="btn btn-primary w-full py-3 text-base" disabled={busy} aria-busy={busy}>
+          {busy ? (busyMsg || "Working…") : "Analyze"}
         </button>
+        {busy && busyMsg && (
+          <div className="muted text-center text-xs flex items-center justify-center gap-2 pt-1">
+            <span className="inline-block w-3 h-3 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+            {busyMsg}
+          </div>
+        )}
       </div>
 
       <div className="card space-y-3">

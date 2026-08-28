@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 type AgentT = {
@@ -110,16 +110,25 @@ function stepState(stepPct: number, curPct: number): "done"|"running"|"pending" 
   return "pending";
 }
 
-function RunningScreen({ data }: { data: SessionData }) {
-  const done = data.status === "COMPLETED" || data.status === "FAILED";
+function RunningScreen({
+  data,
+  runError,
+  stuck,
+  onRetry,
+}: {
+  data: SessionData;
+  runError: string | null;
+  stuck: boolean;
+  onRetry: () => void;
+}) {
   return (
     <div className="panel space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="section-title mb-0">Analysis Running</h2>
-        <span className={`chip ${data.status==="COMPLETED"?"chip-buy":data.status==="FAILED"?"chip-sell":"chip-muted"}`}>{data.status}</span>
+        <span className={`chip ${data.status === "COMPLETED" ? "chip-buy" : data.status === "FAILED" ? "chip-sell" : "chip-muted"}`}>{data.status}</span>
       </div>
       <div className="w-full h-2 bg-bg-soft rounded overflow-hidden">
-        <div className="h-2 bg-gradient-to-r from-emerald-500 to-blue-500 transition-all duration-300" style={{width: `${data.progress}%`}} />
+        <div className="h-2 bg-gradient-to-r from-emerald-500 to-blue-500 transition-all duration-300" style={{ width: `${data.progress}%` }} />
       </div>
       <div className="text-sm text-slate-300">
         <span className="font-mono text-slate-400">{data.progress}%</span> — {data.progress_message}
@@ -141,13 +150,20 @@ function RunningScreen({ data }: { data: SessionData }) {
           );
         })}
       </ol>
-      {data.status === "FAILED" && data.error && (
+      {runError && (
         <div className="border border-red-900/60 bg-red-950/30 text-red-300 rounded-lg p-3 text-sm">
-          {data.error}
+          {runError}
         </div>
       )}
-      {done && (
-        <div className="text-sm muted">Analysis finished. Scroll down to see the council, debate, and final verdict.</div>
+      {stuck && (
+        <div className="border border-amber-900/60 bg-amber-950/30 text-amber-200 rounded-lg p-3 text-sm">
+          The pipeline appears stalled — no progress change for a while. You can restart it below.
+        </div>
+      )}
+      {(runError || stuck) && (
+        <button className="btn" onClick={onRetry}>
+          Restart pipeline
+        </button>
       )}
     </div>
   );
@@ -275,33 +291,112 @@ function SectionHeader({ n, title, subtitle }: { n:number; title:string; subtitl
 
 export default function AnalysisView({ sessionId, initial }: { sessionId: string; initial: SessionData }) {
   const [data, setData] = useState<SessionData>(initial);
-  const [fbMsg, setFbMsg] = useState<string|null>(null);
+  const [fbMsg, setFbMsg] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [stuck, setStuck] = useState(false);
+  const kickRef = useRef(false); // auto-trigger /api/run-agents at most once
+  const lastChangeRef = useRef(Date.now()); // last time progress/status changed
   const done = data.status === "COMPLETED" || data.status === "FAILED";
   const hasAgents = data.agents.length > 0;
   const snap = data.snapshot;
 
   useEffect(() => {
     if (done) return;
-    // Auto-kick the agent pipeline if session was just created (CREATED) and not yet running.
-    if (data.status === "CREATED") {
+
+    // Auto-kick the agent pipeline if the session is still CREATED
+    // (user landed directly on /analysis/[id] before it was started).
+    if (data.status === "CREATED" && !kickRef.current) {
+      kickRef.current = true;
       fetch("/api/run-agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId }),
-      }).catch(()=>{});
+      })
+        .then(async (r) => {
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            setRunError(
+              j?.error || `Failed to start the agent pipeline (HTTP ${r.status}).`
+            );
+          }
+        })
+        .catch(() => {
+          setRunError("Failed to reach /api/run-agents. Check your connection and retry.");
+        });
     }
+
+    let stopped = false;
+    let notFoundCount = 0;
+    let prevProgress = data.progress;
+    let prevStatus = data.status;
+    lastChangeRef.current = Date.now();
+
     const t = setInterval(async () => {
+      if (stopped) return;
       try {
         const r = await fetch(`/api/sessions/${sessionId}`, { cache: "no-store" });
-        if (r.ok) {
-          const j = await r.json();
-          setData(j);
-          if (j.status === "COMPLETED" || j.status === "FAILED") clearInterval(t);
+        if (!r.ok) {
+          if (r.status === 404) {
+            notFoundCount++;
+            if (notFoundCount >= 3) {
+              // Session disappeared server-side (e.g. lost in a redeploy).
+              // Stop polling and surface an actionable error instead of spinning forever.
+              clearInterval(t);
+              setRunError(
+                "This session no longer exists on the server. Start a new analysis."
+              );
+            }
+          }
+          return;
         }
-      } catch {}
+        notFoundCount = 0;
+        const j = await r.json();
+        const now = Date.now();
+        if (j.progress !== prevProgress || j.status !== prevStatus) {
+          prevProgress = j.progress;
+          prevStatus = j.status;
+          lastChangeRef.current = now;
+          setStuck(false);
+        } else if (now - lastChangeRef.current > 150_000) {
+          // ~2.5 min without any progress change → surface a retry option.
+          setStuck(true);
+        }
+        setData(j);
+        // Terminal states stop the polling loop.
+        if (j.status === "COMPLETED" || j.status === "FAILED") {
+          clearInterval(t);
+        }
+      } catch {
+        // Transient network error — keep polling.
+      }
     }, 1500);
-    return () => clearInterval(t);
+
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
   }, [done, sessionId, data.status]);
+
+  async function retryPipeline() {
+    setRunError(null);
+    setStuck(false);
+    lastChangeRef.current = Date.now();
+    try {
+      const r = await fetch("/api/run-agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setRunError(
+          j?.error || `Failed to restart the agent pipeline (HTTP ${r.status}).`
+        );
+      }
+    } catch (e: any) {
+      setRunError(e?.message ?? "Failed to restart the agent pipeline.");
+    }
+  }
 
   async function sendFeedback(r: "WIN"|"LOSS"|"BREAKEVEN"|"SKIPPED") {
     setFbMsg(null);
@@ -361,8 +456,19 @@ export default function AnalysisView({ sessionId, initial }: { sessionId: string
         </div>
       </div>
 
-      {!done && <RunningScreen data={data} />}
-      {data.error && done && data.status === "FAILED" && <div className="card border-red-900/60 bg-red-950/30 text-red-300">Error: {data.error}</div>}
+      {!done && (
+        <RunningScreen data={data} runError={runError} stuck={stuck} onRetry={retryPipeline} />
+      )}
+      {done && data.status === "FAILED" && (
+        <div className="card border-red-900/60 bg-red-950/30 text-red-300">
+          <div className="font-semibold mb-1">Analysis failed</div>
+          <div className="text-sm font-mono break-words">{data.error || "Unknown error"}</div>
+          <div className="muted mt-2">
+            Check the <Link href="/api-health" className="underline">API Health</Link> page to see
+            which providers are reachable, then start a new analysis.
+          </div>
+        </div>
+      )}
 
       {hasAgents && (
         <>

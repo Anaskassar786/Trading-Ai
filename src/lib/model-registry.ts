@@ -53,6 +53,7 @@ export function providerConfigured(provider: ModelConfig["provider"]): boolean {
 // Known multimodal-capable model substrings (for capability detection — user can override).
 const VISION_HINTS = [
   "vision",
+  "llama-3.2-11b-vision", // OpenRouter free-tier multimodal (default vision model)
   "minimax-m3", // per NVIDIA docs, MiniMax M3 supports image input
   "gemini",
   "gpt-4o",
@@ -108,8 +109,14 @@ export function buildEffectiveModels(): {
 } {
   const s = getSettings();
   const visionChoice = s.models.vision;
-  const textChoice = s.models.text ?? { provider: "nvidia", model_id: "minimaxai/minimax-m3" };
-  const judgeChoice = s.models.judge ?? textChoice;
+  const textChoice = s.models.text ?? {
+    provider: "openrouter",
+    model_id: "meta-llama/llama-3.1-8b-instruct:free",
+  };
+  const judgeChoice = s.models.judge ?? {
+    provider: "openrouter",
+    model_id: "deepseek/deepseek-chat:free",
+  };
 
   const vision: ModelConfig | null = visionChoice
     ? buildConfig(visionChoice.provider as ModelConfig["provider"], visionChoice.model_id, "vision", 1)
