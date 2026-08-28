@@ -92,12 +92,19 @@ export async function runChiefJudge(
       risk_amount: snapshot.risk.riskAmount ?? null,
       position_size: null,
       risk_reward: null,
-      decision_summary: "ANALYSIS_UNAVAILABLE — no LLM provider is configured.",
+      decision_summary:
+        "ANALYSIS_UNAVAILABLE — no LLM provider is configured (no provider API key is present for any model). " +
+        "Open the API Health page (/api-health) to see which providers are configured, set at least one " +
+        "provider key in the server-side environment variables, then re-run this analysis.",
       strongest_bullish_arguments: [],
       strongest_bearish_arguments: [],
       rejected_arguments: [],
       invalidation_conditions: [],
-      warnings: ["No LLM provider is configured; analysis unavailable."],
+      warnings: [
+        "No LLM provider is configured; analysis unavailable.",
+        "Check the API Health page (/api-health) and configure at least one provider.",
+        "No verdict, entry, stop loss, or target was fabricated.",
+      ],
       data_quality: "DATA_UNAVAILABLE",
       model_used: "none",
       provider_used: "none",
@@ -109,6 +116,17 @@ export async function runChiefJudge(
   // LLM call and do NOT fabricate a verdict. Return explicit ANALYSIS_UNAVAILABLE.
   if (allAgentsErrored && !anyAgentEvidence) {
     const sampleErr = agentErrors[0] ?? "unknown error";
+    // Summarize WHICH providers/models failed, so the user knows what to fix.
+    const failedByProvider: Record<string, { models: Set<string>; count: number }> = {};
+    for (const r of results) {
+      const p = r.provider_used || "unknown";
+      if (!failedByProvider[p]) failedByProvider[p] = { models: new Set(), count: 0 };
+      failedByProvider[p].models.add(r.model_used);
+      failedByProvider[p].count++;
+    }
+    const failureList = Object.entries(failedByProvider)
+      .map(([p, info]) => `${p} (${info.count} agent${info.count === 1 ? "" : "s"}, model: ${Array.from(info.models).join(", ")})`)
+      .join("; ");
     return {
       final_decision: "NO_TRADE",
       vote_distribution: v,
@@ -120,13 +138,18 @@ export async function runChiefJudge(
       position_size: null,
       risk_reward: null,
       decision_summary:
-        "ANALYSIS_UNAVAILABLE — all 10 specialist agents failed before producing any analysis (the LLM provider is unreachable from this environment, likely a network/auth issue). There is no real evidence for the Chief Judge to evaluate. No verdict, entry, stop loss, or target has been fabricated. Check API Health and re-run analysis when providers are reachable.",
+        "ANALYSIS_UNAVAILABLE — all 10 specialist agents failed before producing any analysis, so there is no real evidence for the Chief Judge to evaluate. " +
+        "No verdict, entry, stop loss, or target has been fabricated. " +
+        "Open the API Health page (/api-health) to diagnose, verify the API keys and model IDs in Settings, then re-run this analysis. " +
+        `Failing providers/models: ${failureList}`,
       strongest_bullish_arguments: [],
       strongest_bearish_arguments: [],
       rejected_arguments: [],
       invalidation_conditions: [],
       warnings: [
         `All 10 agents errored. Sample error: ${sampleErr}`,
+        `Failing providers/models: ${failureList}`,
+        "Check the API Health page (/api-health) and fix the failing providers before re-running.",
         "No entries, stop losses, or targets were produced because no real model analysis exists.",
         "Do NOT trade based on this session.",
       ],
